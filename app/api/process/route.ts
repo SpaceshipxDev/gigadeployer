@@ -81,7 +81,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
   }
 
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'order-'))
+    const m = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
+    const jsonText = m ? m[1] : text
+    parsed = JSON.parse(jsonText)
   const zip = new AdmZip(Buffer.from(await file.arrayBuffer()))
   zip.extractAllTo(tmpDir, true)
   const entries = await fs.readdir(tmpDir)
