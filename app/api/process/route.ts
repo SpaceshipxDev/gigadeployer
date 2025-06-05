@@ -46,6 +46,14 @@ async function screenshotSTP(file: string, outDir: string) {
   } catch (e) {
     console.error('screenshot error', e)
     return []
+  const outPath = path.join(outDir, path.basename(file) + '.png')
+  try {
+    await exec('python3', ['scripts/stp_screenshot.py', file, outPath])
+    const b64 = await fs.readFile(outPath, { encoding: 'base64' })
+    return b64
+  } catch (e) {
+    console.error('screenshot error', e)
+    return ''
   }
 }
 
@@ -68,6 +76,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  const file = formData.get('file')
+  if (!file || !(file instanceof File)) {
+    return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
+  }
+
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'order-'))
+  const zip = new AdmZip(Buffer.from(await file.arrayBuffer()))
+  zip.extractAllTo(tmpDir, true)
   const entries = await fs.readdir(tmpDir)
 
   const excelFiles = entries.filter((f) => f.match(/\.xlsx?$/i))
@@ -89,6 +105,7 @@ export async function POST(req: NextRequest) {
   }
 
   const images: Record<string, string[]> = {}
+  const images: Record<string, string> = {}
   for (const f of stpFiles) {
     images[f] = await screenshotSTP(path.join(tmpDir, f), tmpDir)
   }
@@ -101,6 +118,8 @@ export async function POST(req: NextRequest) {
     'Return JSON array with fields part, quantity, material, finish.'
 
   const docs = JSON.stringify({ excelData, pptxText, parts: images })
+
+  const docs = JSON.stringify({ excelData, pptxText, parts: Object.keys(images) })
   const result = await model.generateContent([prompt, docs])
   const text = result.response.text()
 
@@ -121,6 +140,7 @@ export async function POST(req: NextRequest) {
     { header: 'Image', key: 'image', width: 15 },
   ]
   let rowNum = 2
+  ]
   for (const row of parsed) {
     sheet.addRow({
       part: row.part,
@@ -135,6 +155,7 @@ export async function POST(req: NextRequest) {
       sheet.addImage(id, `E${rowNum}:E${rowNum}`)
     }
     rowNum++
+    })
   }
   const excelPath = path.join(tmpDir, 'manufacturing_log.xlsx')
   await workbook.xlsx.writeFile(excelPath)
