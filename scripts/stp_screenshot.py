@@ -2,7 +2,10 @@ import sys
 import os
 import json
 
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+
 try:
     from OCC.Core.STEPControl import STEPControl_Reader
     from OCC.Display.SimpleGui import init_display
@@ -15,6 +18,14 @@ if len(sys.argv) < 3:
     sys.exit(1)
 
 inp, outdir = sys.argv[1], sys.argv[2]
+
+
+
+    print('Usage: stp_screenshot.py input.stp output.png', file=sys.stderr)
+    sys.exit(1)
+
+inp, outp = sys.argv[1], sys.argv[2]
+
 
 reader = STEPControl_Reader()
 reader.ReadFile(inp)
@@ -35,3 +46,14 @@ for i in range(1, reader.NbShapes() + 1):
     names.append(name)
 
 print(json.dumps(names))
+
+
+shape = reader.OneShape()
+
+display, start_display, add_menu, add_function_to_menu = init_display()
+
+display.DisplayShape(shape)
+display.View_Iso()
+display.FitAll()
+display.backend._display.Export(outp)
+
