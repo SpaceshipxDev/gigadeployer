@@ -31,11 +31,13 @@ function extractPptxText(buffer: Buffer) {
 
 async function screenshotSTP(file: string, outDir: string) {
   try {
-    const { stdout } = await exec('python3', [
-      'scripts/stp_screenshot.py',
-      file,
-      outDir,
-    ])
+    const { stdout } = await exec(
+      'python3',
+      ['scripts/stp_screenshot.py', file, outDir],
+      {
+        env: { ...process.env, QT_QPA_PLATFORM: 'offscreen' },
+      }
+    )
     const names: string[] = JSON.parse(stdout.trim() || '[]')
     const images: string[] = []
     for (const n of names) {

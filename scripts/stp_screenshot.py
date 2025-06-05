@@ -1,6 +1,8 @@
 import sys
 import os
 import json
+
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 try:
     from OCC.Core.STEPControl import STEPControl_Reader
     from OCC.Display.SimpleGui import init_display
