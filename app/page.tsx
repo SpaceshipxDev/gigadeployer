@@ -3,16 +3,20 @@ import { useCallback, useState } from 'react'
 import { useDropzone } from 'react-dropzone'
 
 export default function Home() {
-  const [result, setResult] = useState<any>(null)
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
+  const [status, setStatus] = useState<string>('')
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return
     const formData = new FormData()
     formData.append('file', acceptedFiles[0])
+    setStatus('Processing...')
     const res = await fetch('/api/process', { method: 'POST', body: formData })
     if (res.ok) {
-      setResult(await res.json())
+      const blob = await res.blob()
+      setDownloadUrl(URL.createObjectURL(blob))
+      setStatus('Done')
     } else {
-      setResult({ error: await res.text() })
+      setStatus('Error: ' + (await res.text()))
     }
   }, [])
 
@@ -28,10 +32,15 @@ export default function Home() {
           <p>Drag 'n' drop a zip file here, or click to select</p>
         )}
       </div>
-      {result && (
-        <pre className="mt-4 w-full max-w-xl overflow-auto bg-gray-100 p-4 text-xs">
-          {JSON.stringify(result, null, 2)}
-        </pre>
+      {status && <p className="mt-4">{status}</p>}
+      {downloadUrl && (
+        <a
+          href={downloadUrl}
+          download="results.zip"
+          className="mt-2 rounded bg-blue-500 px-4 py-2 text-white"
+        >
+          Download Results
+        </a>
       )}
     </main>
   )
