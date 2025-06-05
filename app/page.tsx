@@ -8,7 +8,9 @@ export default function Home() {
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return
     const formData = new FormData()
-    formData.append('file', acceptedFiles[0])
+    for (const f of acceptedFiles) {
+      formData.append('files', f, f.webkitRelativePath || f.name)
+    }
     setStatus('Processing...')
     const res = await fetch('/api/process', { method: 'POST', body: formData })
     if (res.ok) {
@@ -20,16 +22,24 @@ export default function Home() {
     }
   }, [])
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop })
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    multiple: true,
+    useFsAccessApi: false,
+  })
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-8 gap-4">
       <div {...getRootProps({ className: 'border border-dashed p-10 text-center' })}>
-        <input {...getInputProps()} />
+        <input
+          {...getInputProps()}
+          multiple
+          {...({ webkitdirectory: 'true', directory: '' } as any)}
+        />
         {isDragActive ? (
           <p>Drop the files here...</p>
         ) : (
-          <p>Drag 'n' drop a zip file here, or click to select</p>
+          <p>Drag 'n' drop a folder here, or click to select</p>
         )}
       </div>
       {status && <p className="mt-4">{status}</p>}

@@ -30,27 +30,44 @@ function extractPptxText(buffer: Buffer) {
 }
 
 async function screenshotSTP(file: string, outDir: string) {
-  const outPath = path.join(outDir, path.basename(file) + '.png')
   try {
-    await exec('python3', ['scripts/stp_screenshot.py', file, outPath])
-    const b64 = await fs.readFile(outPath, { encoding: 'base64' })
-    return b64
+    const { stdout } = await exec('python3', [
+      'scripts/stp_screenshot.py',
+      file,
+      outDir,
+    ])
+    const names: string[] = JSON.parse(stdout.trim() || '[]')
+    const images: string[] = []
+    for (const n of names) {
+      const b64 = await fs.readFile(path.join(outDir, n), { encoding: 'base64' })
+      images.push(b64)
+    }
+    return images
   } catch (e) {
     console.error('screenshot error', e)
-    return ''
+    return []
   }
 }
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData()
-  const file = formData.get('file')
-  if (!file || !(file instanceof File)) {
-    return NextResponse.json({ error: 'No file uploaded' }, { status: 400 })
+  const files = formData.getAll('files').filter((f) => f instanceof File) as File[]
+  if (files.length === 0) {
+    return NextResponse.json({ error: 'No files uploaded' }, { status: 400 })
   }
 
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'order-'))
-  const zip = new AdmZip(Buffer.from(await file.arrayBuffer()))
-  zip.extractAllTo(tmpDir, true)
+
+  if (files.length === 1 && files[0].name.endsWith('.zip')) {
+    const zip = new AdmZip(Buffer.from(await files[0].arrayBuffer()))
+    zip.extractAllTo(tmpDir, true)
+  } else {
+    for (const f of files) {
+      const buf = Buffer.from(await f.arrayBuffer())
+      await fs.writeFile(path.join(tmpDir, f.name), buf)
+    }
+  }
+
   const entries = await fs.readdir(tmpDir)
 
   const excelFiles = entries.filter((f) => f.match(/\.xlsx?$/i))
@@ -71,7 +88,7 @@ export async function POST(req: NextRequest) {
     pptxText += extractPptxText(buf) + '\n'
   }
 
-  const images: Record<string, string> = {}
+  const images: Record<string, string[]> = {}
   for (const f of stpFiles) {
     images[f] = await screenshotSTP(path.join(tmpDir, f), tmpDir)
   }
@@ -83,7 +100,7 @@ export async function POST(req: NextRequest) {
     'Match each part with its quantity, material and finish. ' +
     'Return JSON array with fields part, quantity, material, finish.'
 
-  const docs = JSON.stringify({ excelData, pptxText, parts: Object.keys(images) })
+  const docs = JSON.stringify({ excelData, pptxText, parts: images })
   const result = await model.generateContent([prompt, docs])
   const text = result.response.text()
 
@@ -101,14 +118,23 @@ export async function POST(req: NextRequest) {
     { header: 'Quantity', key: 'quantity', width: 10 },
     { header: 'Material', key: 'material', width: 20 },
     { header: 'Finish', key: 'finish', width: 20 },
+    { header: 'Image', key: 'image', width: 15 },
   ]
+  let rowNum = 2
   for (const row of parsed) {
     sheet.addRow({
       part: row.part,
       quantity: row.quantity,
       material: row.material,
       finish: row.finish,
+      image: '',
     })
+    const img = images[row.part]?.[0]
+    if (img) {
+      const id = workbook.addImage({ base64: img, extension: 'png' })
+      sheet.addImage(id, `E${rowNum}:E${rowNum}`)
+    }
+    rowNum++
   }
   const excelPath = path.join(tmpDir, 'manufacturing_log.xlsx')
   await workbook.xlsx.writeFile(excelPath)
